@@ -73,3 +73,7 @@ streamlit run app.py
 - Requires an OpenAI API key for LLM extraction.
 - Only PDF datasheets are supported.
 - Extraction logic can be customized in `parser_utils.py` and `prompt_utils.py`.
+
+## Performance Note
+
+For fast datasheet parsing, a GPU is required. The underlying Docling model used for PDF parsing performs significantly better with GPU acceleration. Running on CPU is possible but will be much slower, especially for large or complex datasheets.
