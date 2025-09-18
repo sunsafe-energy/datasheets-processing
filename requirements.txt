@@ -1,0 +1,12 @@
+ipykernel
+pandas
+numpy
+python-dotenv
+docling
+langchain
+langchain-chroma
+langchain-openai
+pydantic
+lxml
+langchainhub
+streamlit
