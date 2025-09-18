@@ -21,9 +21,28 @@ cd datasheets-processing
 
 ### 2. Create a Virtual Environment (Recommended)
 
+
+#### Using `venv` (Standard Python)
+
+**Windows:**
 ```sh
 python -m venv .venv
-.venv\Scripts\activate  # On Windows
+.venv\Scripts\activate
+```
+
+**Mac/Linux:**
+```sh
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+#### Using `conda` (Alternative)
+
+If you prefer using conda:
+
+```sh
+conda create -n datasheets python=3.10
+conda activate datasheets
 ```
 
 ### 3. Install Dependencies
