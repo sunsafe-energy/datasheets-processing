@@ -1,6 +1,6 @@
 # Solar Components Datasheet Extractor
 
-This project extracts structured specifications from solar charge controller datasheets (PDFs) using LLMs, document parsing, and retrieval-augmented generation (RAG). It provides a Streamlit web app for easy upload and download of extracted data in JSON and Excel formats.
+This project extracts structured specifications from solar charge controller datasheets (PDFs) using LLMs, document parsing, and retrieval-augmented generation (RAG). It provides a FastAPI web server for uploading datasheets and downloading extracted data in JSON and Excel formats.
 
 Currently, only solar charge controller datasheets can be parsed. Support for parsing the rest of the components is coming soon.
 
@@ -68,21 +68,21 @@ OPENAI_API_KEY=sk-...your-openai-api-key-here...
 
 ## Running the Application
 
-### 1. Start the Streamlit App
+### 1. Start the FastAPI Server
 
 ```sh
-streamlit run app.py
+uvicorn app:app --reload
 ```
 
-### 2. Using the App
+### 2. Using the API
 
-- Open the provided local URL in your browser.
-- Upload a solar charge controller PDF datasheet.
-- View extracted specs, and download as JSON or Excel.
+- Open the provided local URL (shown in the terminal) in your browser.
+- Visit `/docs` for the interactive Swagger UI to test the API.
+- Use the API to upload a solar charge controller PDF datasheet and download extracted specs as JSON or Excel.
 
 ## File Overview
 
-- `app.py` — Main Streamlit app
+- `app.py` — Main FastAPI app
 - `parser_utils.py` — PDF/text/table extraction utilities
 - `prompt_utils.py` — LLM prompt and RAG pipeline setup
 - `requirements.txt` — Python dependencies
