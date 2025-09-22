@@ -10,3 +10,4 @@ pydantic
 lxml
 langchainhub
 fastapi
+python-multipart
