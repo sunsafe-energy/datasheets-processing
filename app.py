@@ -1,18 +1,46 @@
+import os
+import json
+from dotenv import load_dotenv
+import tempfile
+import shutil
+from enum import Enum
+from fastapi import FastAPI, UploadFile, Form
+from pydantic import BaseModel, Field, ValidationError
+from typing import Union, List
+import uvicorn
+
 from parser_utils import get_conversion, get_tables, get_text
 from prompt_utils import prepare_summary_chain, prepare_rag_pipeline, prepare_charge_controller_prompt
 
-import os
-import streamlit as st
-import json
-from dotenv import load_dotenv
-import pandas as pd
-from io import BytesIO
-
-# For PDF processing
-from pathlib import Path
 
 load_dotenv()
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+
+# ===================== ENUM =====================
+class ComponentType(str, Enum):
+    charge_controller = "charge_controller"
+    battery = "battery"
+    inverter = "inverter"
+    solar_panel = "solar_panel"
+
+# ===================== BASE MODEL =====================
+class DatasheetBase(BaseModel):
+    manufacturer: str = Field(..., example="Xantrex")
+    model: str = Field(..., example="MPPT60")
+    needs_review: bool = False
+
+# ===================== UNION MODELS =====================
+class ChargeControllerSpecs(DatasheetBase):
+    voc: str = Field(..., example="150V")
+    battery_voltage: str = Field(..., example="12V")
+    charging_current: str = Field(..., example="60A")
+    pv_power: str = Field(..., example="8000W")
+    battery_power: str = Field(None, example="720W")
+
+DatasheetResult = Union[
+    ChargeControllerSpecs
+]
+
 
 def process_datasheet(pdf_file):
     """
@@ -49,59 +77,70 @@ def process_datasheet(pdf_file):
 
     return res
 
-def to_excel(data):
-    """Convert list of dicts to Excel (in-memory)."""
-    df = pd.DataFrame(data)
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        df.to_excel(writer, index=False, sheet_name="Specs")
-    output.seek(0)
-    return output
+# ===================== PROCESSOR =====================
+def process_with_validation(pdf_path: str, component_type: ComponentType) -> List[DatasheetResult]:
+    llm_array = process_datasheet(pdf_path)
 
-# -------------------------
-# Streamlit UI
-# -------------------------
-st.title("⚡ Solar Datasheet Extractor Demo")
+    results: List[DatasheetResult] = []
 
-uploaded_file = st.file_uploader("Upload a datasheet (PDF)", type=["pdf"])
+    try:
+        for item in llm_array:
+            try:
+                if component_type == ComponentType.charge_controller:
+                    results.append(ChargeControllerSpecs.model_validate(item))
+                else:
+                    # The rest of the components are not yet available
+                    results.append(DatasheetBase(
+                        manufacturer=item.get("manufacturer", "Unknown"),
+                        model=item.get("model", "Unknown"),
+                        needs_review=True
+                    ))
+            except ValidationError:
+                # Add fallback for invalid entries
+                results.append(DatasheetBase(
+                    manufacturer="Unknown",
+                    model="Unknown",
+                    needs_review=True
+                ))
+    except Exception:
+        # If the whole JSON is broken, return one fallback entry
+        results.append(DatasheetBase(
+            manufacturer="Unknown",
+            model="Unknown",
+            needs_review=True
+        ))
 
-if uploaded_file:
-    base_name = Path(uploaded_file.name).stem
-    tmp_path = Path("tmp.pdf")
+    return results
 
-    # Only process once per file
-    if "last_file" not in st.session_state or st.session_state.last_file != uploaded_file.name:
-        with open(tmp_path, "wb") as f:
-            f.write(uploaded_file.getbuffer())
+# ===================== FASTAPI APP =====================
+app = FastAPI(
+    title="Solar Datasheet Processor API",
+    description="Upload a datasheet PDF and extract structured specs (multiple models supported)",
+    version="1.3.0"
+)
 
-        try:
-            results = process_datasheet(tmp_path)
-            st.session_state.results = results
-            st.session_state.last_file = uploaded_file.name
-        finally:
-            if tmp_path.exists():
-                os.remove(tmp_path)
+@app.post(
+    "/process-datasheet/",
+    response_model=List[DatasheetResult],
+    summary="Process a datasheet PDF"
+)
+async def process_datasheet_api(
+    file: UploadFile,
+    component_type: ComponentType = Form(...)
+):
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+        tmp_path = tmp.name
+        shutil.copyfileobj(file.file, tmp)
 
-    # Retrieve stored results
-    results = st.session_state.get("results", [])
+    try:
+        result = process_with_validation(tmp_path, component_type)
+        return result
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
 
-    # Show as JSON
-    st.subheader("🔎 Extracted Specifications")
-    st.json(results)
 
-    # Download JSON
-    st.download_button(
-        label="Download JSON",
-        data=json.dumps(results, indent=2),
-        file_name=f"{base_name}_specs.json",
-        mime="application/json"
-    )
+# ===================== RUN LOCALLY =====================
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)
 
-    # Download Excel
-    excel_data = to_excel(results)
-    st.download_button(
-        label="Download Excel",
-        data=excel_data,
-        file_name=f"{base_name}_specs.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
